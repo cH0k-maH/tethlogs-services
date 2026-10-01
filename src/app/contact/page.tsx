@@ -24,6 +24,11 @@ export default function ContactPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [inquiryResult, setInquiryResult] = useState<{
+    inquiryCode: string;
+    whatsappUrl: string;
+  } | null>(null);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -66,15 +71,40 @@ export default function ContactPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to submit inquiry.");
+      }
+
+      setInquiryResult({
+        inquiryCode: data.inquiryCode,
+        whatsappUrl: data.whatsappUrl,
+      });
       setSubmitted(true);
-    }, 1000);
+    } catch (err: unknown) {
+      console.error("Contact error:", err);
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while sending your inquiry. Please try again or reach out on WhatsApp."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -238,16 +268,48 @@ export default function ContactPage() {
                 <h3 className="text-2xl font-extrabold text-[#0A192F]">
                   Message Sent Successfully
                 </h3>
+
+                {inquiryResult?.inquiryCode && (
+                  <div className="inline-block bg-slate-900 text-white font-mono text-sm px-4 py-2 rounded-lg font-bold border border-slate-700">
+                    Ref ID: <span className="text-[#0052CC]">{inquiryResult.inquiryCode}</span>
+                  </div>
+                )}
+
                 <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
-                  Thank you for reaching out. A Tethlogs service coordinator will review your message and respond within 2 business hours.
+                  Thank you for reaching out. A Tethlogs service coordinator will review your inquiry and respond within 2 business hours.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setSubmitted(false)}
-                  className="mt-4 text-xs font-bold text-[#0052CC] hover:underline"
-                >
-                  Send another inquiry
-                </button>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  {inquiryResult?.whatsappUrl && (
+                    <a
+                      href={inquiryResult.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-sm transition-all"
+                    >
+                      <WhatsAppIcon size={16} />
+                      <span>Fast-Track on WhatsApp</span>
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmitted(false);
+                      setInquiryResult(null);
+                      setFormData({
+                        name: "",
+                        email: "",
+                        phone: "",
+                        subject: "General Technical Inquiry",
+                        message: "",
+                      });
+                    }}
+                    className="text-xs font-bold text-[#0052CC] hover:underline py-2"
+                  >
+                    Send another inquiry
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -364,6 +426,19 @@ export default function ContactPage() {
                     <p className="mt-1 text-xs text-[#E51937] font-medium">{errors.message}</p>
                   )}
                 </div>
+
+                {submitError && (
+                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-[#E51937] font-medium flex items-center justify-between">
+                    <span>{submitError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSubmitError(null)}
+                      className="text-red-400 hover:text-red-700 font-bold ml-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <button

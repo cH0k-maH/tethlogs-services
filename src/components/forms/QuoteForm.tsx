@@ -27,6 +27,11 @@ export default function QuoteForm({ preselectedProduct = "" }: QuoteFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [quoteResult, setQuoteResult] = useState<{
+    quoteCode: string;
+    whatsappUrl: string;
+  } | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -67,18 +72,49 @@ export default function QuoteForm({ preselectedProduct = "" }: QuoteFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to submit quote request.");
+      }
+
+      setQuoteResult({
+        quoteCode: data.quoteCode,
+        whatsappUrl: data.whatsappUrl,
+      });
       setIsSubmitted(true);
-    }, 1000);
+    } catch (err: unknown) {
+      console.error("Quote error:", err);
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while submitting. Please contact us directly on WhatsApp."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {
+    const whatsappLink =
+      quoteResult?.whatsappUrl ||
+      `https://wa.me/${COMPANY_INFO.whatsappNumber}?text=Hello%20Tethlogs,%20I%20requested%20a%20quote%20for%20${encodeURIComponent(
+        formData.productOrService
+      )}%20for%20${encodeURIComponent(formData.company || formData.name)}.`;
+
     return (
       <div className="bg-white rounded-2xl p-8 sm:p-12 border border-slate-200 shadow-xl max-w-xl mx-auto text-center animate-fade-in">
         <div className="w-16 h-16 bg-blue-50 text-[#0052CC] rounded-full flex items-center justify-center mx-auto mb-6">
@@ -87,15 +123,20 @@ export default function QuoteForm({ preselectedProduct = "" }: QuoteFormProps) {
         <h3 className="text-2xl font-extrabold text-[#0A192F]">
           Quote Request Sent
         </h3>
+
+        {quoteResult?.quoteCode && (
+          <div className="mt-3 inline-block bg-slate-900 text-white font-mono text-sm px-4 py-2 rounded-lg font-bold border border-slate-700">
+            Quote Ref: <span className="text-[#0052CC]">{quoteResult.quoteCode}</span>
+          </div>
+        )}
+
         <p className="mt-3 text-sm text-slate-600">
-          Thank you, <strong>{formData.name}</strong>. Our enterprise Ricoh technical consulting team will prepare a tailored quotation for <strong>{formData.productOrService}</strong> and contact you shortly.
+          Thank you, <strong>{formData.name}</strong>. Our enterprise Ricoh technical consulting team will prepare a tailored quotation for <strong>{formData.productOrService}</strong>. A confirmation email has been dispatched.
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <a
-            href={`https://wa.me/${COMPANY_INFO.whatsappNumber}?text=Hello%20Tethlogs,%20I%20requested%20a%20quote%20for%20${encodeURIComponent(
-              formData.productOrService
-            )}%20for%20${encodeURIComponent(formData.company || formData.name)}.`}
+            href={whatsappLink}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm px-6 py-3 rounded-lg shadow-sm transition-all"
@@ -108,6 +149,7 @@ export default function QuoteForm({ preselectedProduct = "" }: QuoteFormProps) {
             type="button"
             onClick={() => {
               setIsSubmitted(false);
+              setQuoteResult(null);
               setFormData({
                 name: "",
                 company: "",
@@ -299,6 +341,19 @@ export default function QuoteForm({ preselectedProduct = "" }: QuoteFormProps) {
           />
         </div>
       </div>
+
+      {submitError && (
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-[#E51937] font-medium flex items-center justify-between">
+          <span>{submitError}</span>
+          <button
+            type="button"
+            onClick={() => setSubmitError(null)}
+            className="text-red-400 hover:text-red-700 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="pt-2">
         <button

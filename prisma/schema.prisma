@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ServiceTicket {
+  id                 String   @id @default(cuid())
+  ticketCode         String   @unique
+  fullName           String
+  companyName        String?
+  phone              String
+  email              String
+  deviceType         String
+  brand              String   @default("Ricoh")
+  model              String
+  serviceType        String
+  problemDescription String
+  urgency            String   @default("Standard (Within 24 Hours)")
+  imageUrl           String?
+  status             String   @default("PENDING")
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([ticketCode])
+  @@index([email])
+  @@index([phone])
+}
+
+model QuoteRequest {
+  id               String   @id @default(cuid())
+  quoteCode        String   @unique
+  name             String
+  company          String?
+  phone            String
+  email            String
+  productOrService String
+  quantity         String   @default("1")
+  monthlyVolume    String?
+  requirements     String?
+  status           String   @default("NEW")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([quoteCode])
+  @@index([email])
+}
+
+model ContactInquiry {
+  id          String   @id @default(cuid())
+  inquiryCode String   @unique
+  name        String
+  company     String?
+  email       String
+  phone       String
+  inquiryType String   @default("General Inquiry")
+  message     String
+  status      String   @default("UNREAD")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([inquiryCode])
+  @@index([email])
+}

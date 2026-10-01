@@ -39,6 +39,12 @@ export default function MultiStepServiceForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [ticketResult, setTicketResult] = useState<{
+    ticketCode: string;
+    whatsappUrl: string;
+  } | null>(null);
 
   // Form Fields State
   const [formData, setFormData] = useState({
@@ -82,6 +88,7 @@ export default function MultiStepServiceForm({
         return updated;
       });
 
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData((prev) => ({ ...prev, imagePreview: reader.result as string }));
@@ -142,7 +149,7 @@ export default function MultiStepServiceForm({
     if (step > 1) setStep(step - 1);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep(1)) {
       setStep(1);
@@ -158,13 +165,67 @@ export default function MultiStepServiceForm({
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setSubmitError(null);
+
+    try {
+      let uploadedImageUrl: string | null = null;
+      if (selectedFile) {
+        const uploadData = new FormData();
+        uploadData.append("file", selectedFile);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: uploadData,
+        });
+        if (uploadRes.ok) {
+          const uploadJson = await uploadRes.json();
+          uploadedImageUrl = uploadJson.url;
+        }
+      }
+
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          companyName: formData.companyName || null,
+          phone: formData.phone,
+          email: formData.email,
+          deviceType: formData.deviceType,
+          brand: formData.brand,
+          model: formData.model,
+          serviceType: formData.serviceType,
+          problemDescription: formData.problemDescription,
+          urgency: formData.urgency,
+          imageUrl: uploadedImageUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to log service ticket.");
+      }
+
+      setTicketResult({
+        ticketCode: data.ticketCode,
+        whatsappUrl: data.whatsappUrl,
+      });
       setIsSubmitted(true);
-    }, 1200);
+    } catch (err: unknown) {
+      console.error("Submission failed:", err);
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred submitting your ticket. Please retry or contact us directly on WhatsApp."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const generateWhatsAppMessage = () => {
+    if (ticketResult?.whatsappUrl) {
+      return ticketResult.whatsappUrl;
+    }
     const text = `*New Tethlogs Service Request*%0A%0A*Customer:* ${formData.fullName} (${formData.companyName || "Direct"})%0A*Phone:* ${formData.phone}%0A*Equipment:* ${formData.brand} ${formData.model || "Not specified"}%0A*Service:* ${formData.serviceType}%0A*Issue:* ${formData.problemDescription || "No notes"}%0A*Urgency:* ${formData.urgency}`;
     return `https://wa.me/${COMPANY_INFO.whatsappNumber}?text=${text}`;
   };
@@ -181,8 +242,16 @@ export default function MultiStepServiceForm({
         <h3 className="text-2xl sm:text-3xl font-extrabold text-[#0A192F]">
           Service Request Received
         </h3>
+
+        {ticketResult?.ticketCode && (
+          <div className="mt-4 mb-2 inline-flex items-center gap-2 bg-slate-900 text-white font-mono text-sm px-4 py-2.5 rounded-lg border border-slate-700 shadow-sm">
+            <span className="text-slate-400">Ref Code:</span>
+            <span className="text-[#E51937] font-extrabold tracking-wider">{ticketResult.ticketCode}</span>
+          </div>
+        )}
+
         <p className="mt-3 text-sm text-slate-600 max-w-md mx-auto">
-          Thank you, <strong>{formData.fullName}</strong>. Your ticket for the <strong>{formData.brand} {formData.model}</strong> has been logged in our certified technical engineering queue.
+          Thank you, <strong>{formData.fullName}</strong>. Your ticket for the <strong>{formData.brand} {formData.model}</strong> has been logged in our certified technical queue. A real-time dispatch alert and confirmation email have been sent.
         </p>
 
         <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs space-y-2">
@@ -208,7 +277,7 @@ export default function MultiStepServiceForm({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm px-6 py-3 rounded-lg shadow-sm transition-all"
           >
             <WhatsAppIcon size={18} />
-            <span>Send Copy via WhatsApp for Faster Dispatch</span>
+            <span>Fast-Track Escalation on WhatsApp</span>
           </a>
 
           <button
@@ -216,6 +285,8 @@ export default function MultiStepServiceForm({
             onClick={() => {
               setIsSubmitted(false);
               setStep(1);
+              setSelectedFile(null);
+              setTicketResult(null);
               setFormData({
                 fullName: "",
                 companyName: "",
@@ -656,6 +727,19 @@ export default function MultiStepServiceForm({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {submitError && (
+          <div className="mt-4 p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-[#E51937] font-medium flex items-center justify-between">
+            <span>{submitError}</span>
+            <button
+              type="button"
+              onClick={() => setSubmitError(null)}
+              className="text-red-400 hover:text-red-700 font-bold ml-2"
+            >
+              ✕
+            </button>
           </div>
         )}
 
